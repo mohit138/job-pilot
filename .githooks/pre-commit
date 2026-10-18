@@ -1,0 +1,10 @@
+#!/bin/sh
+# Blocks commits that would publish personal data. See scripts/check-private.ts.
+# Git apps (VS Code, GitHub Desktop) don't load your shell profile, so bun may
+# not be on PATH: also look where the bun installer puts it.
+PATH="$PATH:${BUN_INSTALL:-$HOME/.bun}/bin"
+if ! command -v bun >/dev/null 2>&1; then
+  echo "pre-commit: bun not found, so the privacy check can't run. Install bun (https://bun.sh) or add it to PATH." >&2
+  exit 1
+fi
+exec bun run scripts/check-private.ts

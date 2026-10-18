@@ -1,0 +1,6 @@
+# Your personal data: resume, answers, company list, jobs file. Never committed.
+me/
+
+node_modules/
+*.tmp
+.DS_Store

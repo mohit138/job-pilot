@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "companies": [
+    {
+      "name": "Adobe",
+      "slug": "adobe",
+      "ats": "workday",
+      "board": {
+        "host": "adobe.wd5.myworkdayjobs.com",
+        "tenant": "adobe",
+        "site": "external_experienced"
+      },
+      "careersUrl": "https://careers.adobe.com/us/en/c/engineering-and-product-jobs",
+      "enabled": true,
+      "addedAt": "2026-10-18"
+    },
+    {
+      "name": "Intuit",
+      "slug": "intuit",
+      "ats": "sitemap",
+      "board": {
+        "sitemap": "https://jobs.intuit.com/sitemap.xml"
+      },
+      "careersUrl": "https://jobs.intuit.com/search-jobs?_gl=1*9r73iq*_gcl_au*MTA5NDA4MzMwNy4xNzg3OTkzODU5",
+      "enabled": true,
+      "addedAt": "2026-10-18"
+    },
+    {
+      "name": "JPMC",
+      "slug": "jpmc",
+      "ats": "oracle",
+      "board": {
+        "host": "jpmc.fa.oraclecloud.com",
+        "siteNumber": "CX_1001",
+        "locationId": "300000081145775",
+        "locationLabel": "Bengaluru, Karnataka, India"
+      },
+      "careersUrl": "https://jpmc.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1001/jobs?keyword=software&location=Bengaluru%2C+Karnataka%2C+India&locationId=300000081145775&locationLevel=city&mode=location&radius=25&radiusUnit=KM",
+      "enabled": true,
+      "addedAt": "2026-10-18"
+    },
+    {
+      "name": "Microsoft",
+      "slug": "microsoft",
+      "ats": "eightfold",
+      "board": {
+        "host": "apply.careers.microsoft.com",
+        "domain": "microsoft.com",
+        "location": "India, Karnataka, Bangalore"
+      },
+      "careersUrl": "https://apply.careers.microsoft.com/careers?hl=en&query=Software&start=0&location=India%2C+Karnataka%2C+Bangalore&pid=1970393556957980&sort_by=relevance&filter_distance=160&filter_include_remote=1&filter_include_relocation=0",
+      "enabled": true,
+      "addedAt": "2026-10-18"
+    },
+    {
+      "name": "Stripe",
+      "slug": "stripe",
+      "ats": "greenhouse",
+      "board": {
+        "token": "stripe"
+      },
+      "careersUrl": "https://job-boards.greenhouse.io/stripe",
+      "enabled": true,
+      "addedAt": "2026-10-18"
+    },
+    {
+      "name": "Swiggy",
+      "slug": "swiggy",
+      "ats": "jsonfeed",
+      "board": {
+        "url": "https://careers.swiggy.in/api/jobs.json",
+        "items": "jobs",
+        "title": "t",
+        "location": "l",
+        "date": "d",
+        "link": "u",
+        "department": "b"
+      },
+      "careersUrl": "https://careers.swiggy.in/explore-jobs?q=software&location=Bengaluru",
+      "enabled": true,
+      "addedAt": "2026-10-18",
+      "notes": "Custom SPA; first-party feed found in the site's JS bundle. Jobs link to SmartRecruiters (its API is robots-disallowed, so not used)."
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "location": "Bengaluru",
+  "includeRemote": true,
+  "queries": [
+    "software engineer",
+    "backend engineer",
+    "java developer"
+  ],
+  "jobage": 30,
+  "maxPerCompany": 50,
+  "excludeTitleWords": [
+    "intern",
+    "internship",
+    "principal",
+    "director",
+    "manager"
+  ]
+}
