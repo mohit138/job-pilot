@@ -4,7 +4,7 @@ Finds jobs on the career portals of companies the user chose, ranks them, and ap
 
 ## Layout
 - `src/` - the `jp` command line (`bun run jp --help`). `src/portals/` reads 8 hiring systems (Greenhouse, Lever, Ashby, Workday, Eightfold, Oracle, JSON feeds, sitemaps); `src/portals/README.md` documents each endpoint.
-- `.claude/commands/` - the slash commands: /setup, /add-company, /scrape, /jobs.
+- `.claude/commands/` - the slash commands: /setup, /add-company, /scrape, /rank, /jobs.
 - `me/` - the user's private data: `resume.pdf`, `profile.md`, `answers.md`, `search.json`, `companies.json`, `jobs.json`. Git-ignored. Created by `bun run jp init` from `example/`.
 - `example/` - fake versions of everything in `me/`. Keep them fake.
 

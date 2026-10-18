@@ -9,6 +9,8 @@ import { runAdd, runList, runSetState } from "./commands/manage.ts"
 import { runScrape } from "./commands/scrape.ts"
 import { runJobs, runSet } from "./commands/jobs.ts"
 import { runInit } from "./commands/init.ts"
+import { runDescribe } from "./commands/describe.ts"
+import { runShortlist } from "./commands/shortlist.ts"
 import { checkRobots } from "./portals/robots.ts"
 
 interface Flags {
@@ -45,8 +47,10 @@ USAGE  (bun run jp <command> ...)
   list | remove | enable | disable <company>
   scrape [-c <companies>] [--format table|json]
                                          Search every company with me/search.json; save new jobs to me/jobs.json
-  jobs [-s new,ranked] [-c <company>] [--sort score|date] [--format table|json]
+  jobs [-s new,ranked] [-c <company>] [--sort score|date] [-n <limit>] [--format table|json]
                                          List jobs in the jobs file
+  describe [<job-id>...] [-s new]        Fetch and keep full descriptions (default: all new jobs)
+  shortlist [--min 60]                   Write me/shortlist.html: ranked jobs, best first, numbered
   set <job-id>... [-s <status>] [--score 0-100] [--note <text>] [--force]
                                          Update jobs (statuses: new ranked approved applying applied skipped failed closed)
   detail <job-id> [--format json|plain]  Fetch one job's full description from its portal
@@ -78,7 +82,9 @@ const KNOWN_FLAGS: Record<string, Set<string>> = {
   enable: new Set(["help", "h"]),
   disable: new Set(["help", "h"]),
   scrape: new Set(["company", "format", "help", "h"]),
-  jobs: new Set(["status", "company", "sort", "format", "help", "h"]),
+  jobs: new Set(["status", "company", "sort", "limit", "format", "help", "h"]),
+  describe: new Set(["status", "help", "h"]),
+  shortlist: new Set(["min", "help", "h"]),
   set: new Set(["status", "score", "note", "force", "help", "h"]),
   robots: new Set(["help", "h"]),
 }
@@ -182,7 +188,18 @@ async function main(): Promise<number> {
       const sort = (str(flags.sort) ?? "score") as "score" | "date"
       if (!["json", "table"].includes(format)) return fail("--format must be json or table", "BAD_FORMAT")
       if (!["score", "date"].includes(sort)) return fail("--sort must be score or date", "BAD_SORT")
-      return runJobs({ statuses: list(flags.status), company: str(flags.company), sort, format })
+      const limit = int(flags.limit, "limit")
+      if (limit instanceof Error) return fail(limit.message, "BAD_NUMBER")
+      return runJobs({ statuses: list(flags.status), company: str(flags.company), sort, format, limit })
+    }
+
+    case "describe":
+      return runDescribe({ ids: args.slice(1), statuses: list(flags.status) ?? ["new"] })
+
+    case "shortlist": {
+      const min = int(flags.min, "min")
+      if (min instanceof Error) return fail(min.message, "BAD_NUMBER")
+      return runShortlist({ min: min ?? 60 })
     }
 
     case "set": {

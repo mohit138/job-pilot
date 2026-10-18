@@ -23,6 +23,8 @@ export interface StoredJob extends Job {
   status: Status
   firstSeen: string
   lastSeen: string
+  /** Full job text from the portal, fetched once by `jp describe`. */
+  description?: string
   /** 0-100, set by /rank. */
   score?: number
   /** One line from /rank on why it scored that way. */

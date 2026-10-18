@@ -55,6 +55,26 @@ describe("cli", () => {
     expect(applied.jobs.map((j: any) => j.id)).toEqual(["acme:1"])
   })
 
+  test("shortlist lists ranked jobs above the cut-off, best first, numbered", async () => {
+    const t = "2026-10-18T00:00:00.000Z"
+    const j = (id: string, status: string, score?: number) => ({
+      id, title: `Role <${id}>`, company: "Acme", location: "Bengaluru", date: "2026-10-10", url: "https://example.com/x",
+      department: null, status, score, firstSeen: t, lastSeen: t, history: [],
+    })
+    writeFileSync(join(home, "jobs.json"), JSON.stringify({ version: 1, jobs: {
+      "acme:a": j("acme:a", "ranked", 55), "acme:b": j("acme:b", "ranked", 90), "acme:c": j("acme:c", "approved", 70),
+      "acme:d": j("acme:d", "applied", 95), "acme:e": j("acme:e", "new"),
+    } }))
+    const r = await jp("shortlist")
+    expect(r.exitCode).toBe(0)
+    expect(JSON.parse(r.stdout).rows.map((x: any) => [x.n, x.id])).toEqual([[1, "acme:b"], [2, "acme:c"]])
+    const html = readFileSync(join(home, "shortlist.html"), "utf8")
+    expect(html).toContain("Role &lt;acme:b&gt;")
+    expect(html).toContain("1 applied · 1 not ranked yet")
+    expect(JSON.parse((await jp("shortlist", "--min", "50")).stdout).rows).toHaveLength(3)
+    expect(JSON.parse((await jp("jobs", "-n", "2", "--format", "json")).stdout).count).toBe(2)
+  })
+
   test("scrape with no companies explains how to add one", async () => {
     writeFileSync(join(home, "companies.json"), JSON.stringify({ version: 1, companies: [] }))
     const r = await jp("scrape")

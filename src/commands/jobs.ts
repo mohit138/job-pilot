@@ -6,6 +6,7 @@ export interface JobsOpts {
   company?: string
   sort: "score" | "date"
   format: "json" | "table"
+  limit?: number
 }
 
 export function runJobs(opts: JobsOpts): number {
@@ -26,6 +27,8 @@ export function runJobs(opts: JobsOpts): number {
       ? (b.score ?? -1) - (a.score ?? -1) || (b.date ?? "").localeCompare(a.date ?? "")
       : (b.date ?? "").localeCompare(a.date ?? "")
   )
+
+  if (opts.limit !== undefined) jobs = jobs.slice(0, opts.limit)
 
   if (opts.format === "json") {
     process.stdout.write(JSON.stringify({ count: jobs.length, jobs }, null, 2) + "\n")
