@@ -1,8 +1,10 @@
 // Shared fetch, parsing and filtering helpers for the portal readers.
-// Every ATS adapter goes through jsonFetch/textFetch so backoff, timeouts and
-// the honest User-Agent are applied uniformly.
+// Every ATS adapter goes through jsonFetch/textFetch so robots.txt, per-host
+// pacing, backoff, timeouts and the honest User-Agent are applied uniformly.
 
-export const UA = "Mozilla/5.0 (compatible; job-pilot/0.1)"
+import { clearRobotsCache, robotsAllows, UA } from "./robots.ts"
+
+export { UA }
 
 export function writeError(error: string, code: string): void {
   process.stderr.write(JSON.stringify({ error, code }) + "\n")
@@ -14,46 +16,101 @@ export class HttpError extends Error {
   }
 }
 
+/** The URL if it is http(s), else "" (a feed could hand us javascript: or data: links). */
+export function httpUrl(url: unknown): string {
+  if (typeof url !== "string") return ""
+  try {
+    const u = new URL(url)
+    return u.protocol === "http:" || u.protocol === "https:" ? url : ""
+  } catch {
+    return ""
+  }
+}
+
 interface FetchOpts {
   method?: "GET" | "POST"
   body?: unknown
   accept?: string
 }
 
-/** Fetch with exponential backoff + jitter on 429/5xx. Returns null on 404. */
+/** Politeness per host: at most `perHost` requests in flight, starts at least `gapMs` apart. Tests may change it. */
+export const PACING = { perHost: 2, gapMs: 300, maxRetryAfterMs: 30_000 }
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+const hosts = new Map<string, { active: number; waiting: (() => void)[]; next: number }>()
+
+async function hostSlot(host: string): Promise<() => void> {
+  let h = hosts.get(host)
+  if (!h) hosts.set(host, (h = { active: 0, waiting: [], next: 0 }))
+  if (h.active < PACING.perHost) h.active++
+  else await new Promise<void>((r) => h!.waiting.push(r)) // the releaser hands its slot over
+  const wait = h.next - Date.now()
+  h.next = Math.max(Date.now(), h.next) + PACING.gapMs
+  if (wait > 0) await sleep(wait)
+  return () => {
+    const next = h!.waiting.shift()
+    if (next) next()
+    else h!.active--
+  }
+}
+
+/** Retry-After as milliseconds (seconds or an HTTP date), capped; null when absent or unreadable. */
+export function retryAfterMs(header: string | null, now = Date.now()): number | null {
+  if (!header) return null
+  const secs = Number(header)
+  const ms = Number.isFinite(secs) ? secs * 1000 : Date.parse(header) - now
+  if (!Number.isFinite(ms)) return null
+  return Math.min(Math.max(ms, 0), PACING.maxRetryAfterMs)
+}
+
+export class RobotsDisallowed extends Error {}
+
+/**
+ * Fetch with backoff + jitter on 429/5xx (honouring Retry-After), one host's
+ * pace at a time. Returns null on 404. Throws RobotsDisallowed for a URL the
+ * host's robots.txt doesn't allow, so callers report it instead of treating
+ * the job as gone.
+ */
 export async function rawFetch(url: string, opts: FetchOpts = {}): Promise<string | null> {
-  const maxRetries = 6
-  let delay = 500
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const headers: Record<string, string> = {
-      "User-Agent": UA,
-      Accept: opts.accept ?? "application/json, text/html;q=0.9, */*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.9",
-    }
-    if (opts.body !== undefined) headers["Content-Type"] = "application/json"
-    const response = await fetch(url, {
-      method: opts.method ?? "GET",
-      headers,
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-      redirect: "follow",
-      signal: AbortSignal.timeout(20000),
-    })
-    if (response.status === 429 || response.status >= 500) {
-      if (attempt === maxRetries) {
+  if (!(await robotsAllows(url))) throw new RobotsDisallowed(`robots.txt disallows ${url}`)
+  const release = await hostSlot(new URL(url).host)
+  try {
+    const maxRetries = 6
+    let delay = 500
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      const headers: Record<string, string> = {
+        "User-Agent": UA,
+        Accept: opts.accept ?? "application/json, text/html;q=0.9, */*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+      }
+      if (opts.body !== undefined) headers["Content-Type"] = "application/json"
+      const response = await fetch(url, {
+        method: opts.method ?? "GET",
+        headers,
+        body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+        redirect: "follow",
+        signal: AbortSignal.timeout(20000),
+      })
+      if (response.status === 429 || response.status >= 500) {
+        if (attempt === maxRetries) {
+          throw new HttpError(response.status, `Request failed: ${response.status} ${response.statusText} (${url})`)
+        }
+        const asked = response.status === 429 || response.status === 503 ? retryAfterMs(response.headers.get("retry-after")) : null
+        await sleep(asked ?? delay + Math.floor(Math.random() * 500))
+        delay = Math.min(delay * 2, 8000)
+        continue
+      }
+      if (response.status === 404) return null
+      if (!response.ok) {
         throw new HttpError(response.status, `Request failed: ${response.status} ${response.statusText} (${url})`)
       }
-      const jitter = Math.floor(Math.random() * 500)
-      await new Promise((r) => setTimeout(r, delay + jitter))
-      delay = Math.min(delay * 2, 8000)
-      continue
+      return response.text()
     }
-    if (response.status === 404) return null
-    if (!response.ok) {
-      throw new HttpError(response.status, `Request failed: ${response.status} ${response.statusText} (${url})`)
-    }
-    return response.text()
+    throw new Error("Request failed after max retries")
+  } finally {
+    release()
   }
-  throw new Error("Request failed after max retries")
 }
 
 export async function jsonFetch<T = any>(url: string, opts: FetchOpts = {}): Promise<T | null> {
@@ -68,6 +125,30 @@ export async function jsonFetch<T = any>(url: string, opts: FetchOpts = {}): Pro
 
 export async function textFetch(url: string): Promise<string | null> {
   return rawFetch(url, { accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" })
+}
+
+// Whole boards and feeds, fetched once per run: every query of a scrape and
+// every describe of the same company reuse the first copy.
+const boards = new Map<string, Promise<unknown>>()
+
+function once<T>(key: string, load: () => Promise<T>): Promise<T> {
+  let p = boards.get(key) as Promise<T> | undefined
+  if (!p) {
+    p = load()
+    boards.set(key, p)
+    p.catch(() => boards.delete(key)) // a failure may be retried
+  }
+  return p
+}
+
+export const cachedJson = <T = any>(url: string) => once(`json ${url}`, () => jsonFetch<T>(url))
+export const cachedText = (url: string) => once(`text ${url}`, () => textFetch(url))
+
+/** For tests: forget cached boards, robots.txt verdicts and host pacing. */
+export function resetFetchState(): void {
+  boards.clear()
+  hosts.clear()
+  clearRobotsCache()
 }
 
 // ---------------------------------------------------------------------------

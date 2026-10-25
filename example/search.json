@@ -4,7 +4,8 @@
   "queries": [
     "software engineer",
     "backend engineer",
-    "java developer"
+    "java developer",
+    "full stack engineer"
   ],
   "jobage": 30,
   "maxPerCompany": 50,
@@ -12,7 +13,9 @@
     "intern",
     "internship",
     "principal",
+    "staff",
     "director",
-    "manager"
+    "manager",
+    "sdet"
   ]
 }

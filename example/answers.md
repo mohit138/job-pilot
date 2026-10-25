@@ -1,8 +1,10 @@
 # Application answers
 
-FAKE example. /apply fills application forms from this file and never guesses:
-if a form asks something not covered here, Claude stops and asks you, then
-offers to add your answer here for next time. Keep it truthful.
+FAKE example: replace every value with your own (or run /setup).
+/apply fills application forms only from this file (plus profile.md and your
+resume) and never guesses. Anything a form asks that isn't covered here is left
+empty for you, in the checklist Claude gives you before you submit. Add those
+answers here so next time they're filled for you. Keep it truthful.
 
 ## Contact
 - First name: Alex
@@ -11,13 +13,13 @@ offers to add your answer here for next time. Keep it truthful.
 - Phone: +91 00000 00000
 - City: Bengaluru
 - Country: India
-- LinkedIn: https://www.linkedin.com/in/example
-- GitHub: https://github.com/example
+- LinkedIn: https://www.linkedin.com/in/your-profile
+- GitHub: https://github.com/your-username
 
 ## Work
 - Current company: Acme Payments
 - Current title: Software Engineer II
-- Total experience (years): 4
+- Total experience (years): 5
 - Notice period: 30 days
 - Current CTC (LPA): 20
 - Expected CTC (LPA): 30
@@ -29,7 +31,7 @@ offers to add your answer here for next time. Keep it truthful.
 - Needs visa sponsorship: No
 
 ## Education
-- Degree: B.Tech, Computer Science
+- Degree: B.Tech, Electronics Engineering
 - College: Example Institute of Technology
 - Graduation year: 2021
 

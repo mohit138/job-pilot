@@ -1,12 +1,15 @@
-// robots.txt gate, run when a company is added. A source whose robots.txt
-// disallows the feed URL for "*" or for this tool is refused outright.
+// robots.txt gate. Run when a company is added (a source whose robots.txt
+// disallows the feed URL for "*" or for this tool is refused outright), and
+// again for every request through helpers.rawFetch, with one robots.txt read
+// per host per process.
 // Semantics follow RFC 9309:
 //   * 200 + robots rules      -> longest match wins; a tie goes to Disallow
 //   * 200 but not robots text -> the site publishes no policy (SPA fallback page): allowed
 //   * 4xx (incl. 401/403/404) -> "unavailable": allowed (RFC 9309 §2.3.1.3)
 //   * 5xx / network failure   -> "unreachable": treated as fully disallowed (§2.3.1.4)
 
-import { UA } from "./helpers.ts"
+// Lives here rather than in helpers.ts so helpers can import this file without a cycle.
+export const UA = "Mozilla/5.0 (compatible; job-pilot/0.1)"
 
 const AGENT_TOKEN = "job-pilot"
 
@@ -33,6 +36,7 @@ export function rulesFor(body: string, agent = AGENT_TOKEN): Rule[] {
     const key = m[1].toLowerCase()
     const value = m[2].trim()
     if (key === "user-agent") {
+      if (!value) continue
       if (!current || !lastWasAgent) {
         current = { agents: [], rules: [] }
         groups.push(current)
@@ -46,7 +50,8 @@ export function rulesFor(body: string, agent = AGENT_TOKEN): Rule[] {
       lastWasAgent = false
     }
   }
-  const own = groups.filter((g) => g.agents.some((a) => a !== "*" && agent.toLowerCase().includes(a)))
+  // Exact product-token match, case-insensitive: "pilot" or "job" must not count as us.
+  const own = groups.filter((g) => g.agents.includes(agent.toLowerCase()))
   const chosen = own.length ? own : groups.filter((g) => g.agents.includes("*"))
   return chosen.flatMap((g) => g.rules)
 }
@@ -70,23 +75,50 @@ export function isAllowed(rules: Rule[], path: string): boolean {
   return best ? best.allow : true
 }
 
-export async function checkRobots(url: string): Promise<RobotsVerdict> {
-  const u = new URL(url)
-  const robotsUrl = `${u.protocol}//${u.host}/robots.txt`
+type Policy = { rules: Rule[] } | { all: boolean; reason: string }
+
+async function fetchPolicy(robotsUrl: string): Promise<Policy> {
   let res: Response
   try {
     res = await fetch(robotsUrl, { headers: { "User-Agent": UA }, redirect: "follow", signal: AbortSignal.timeout(15000) })
   } catch (e) {
-    return { allowed: false, reason: `robots.txt unreachable (${(e as Error).message}) — treated as disallow`, robotsUrl }
+    return { all: false, reason: `robots.txt unreachable (${(e as Error).message}) — treated as disallow` }
   }
-  if (res.status >= 500) return { allowed: false, reason: `robots.txt returned ${res.status} — treated as disallow`, robotsUrl }
-  if (res.status >= 400) return { allowed: true, reason: `robots.txt unavailable (HTTP ${res.status}) — no restrictions apply (RFC 9309)`, robotsUrl }
+  if (res.status >= 500) return { all: false, reason: `robots.txt returned ${res.status} — treated as disallow` }
+  if (res.status >= 400) return { all: true, reason: `robots.txt unavailable (HTTP ${res.status}) — no restrictions apply (RFC 9309)` }
   const body = await res.text()
-  if (!/^\s*user-agent\s*:/im.test(body)) {
-    return { allowed: true, reason: "site publishes no robots.txt rules", robotsUrl }
-  }
-  const path = u.pathname + u.search
-  const allowed = isAllowed(rulesFor(body), path)
+  if (!/^\s*user-agent\s*:/im.test(body)) return { all: true, reason: "site publishes no robots.txt rules" }
+  return { rules: rulesFor(body) }
+}
+
+// One robots.txt read per host for the life of the process.
+const policies = new Map<string, Promise<Policy>>()
+
+function policyFor(u: URL): Promise<Policy> {
+  const robotsUrl = `${u.protocol}//${u.host}/robots.txt`
+  let p = policies.get(robotsUrl)
+  if (!p) policies.set(robotsUrl, (p = fetchPolicy(robotsUrl)))
+  return p
+}
+
+/** For tests. */
+export function clearRobotsCache(): void {
+  policies.clear()
+}
+
+/** Per-request check used by the shared fetch path. */
+export async function robotsAllows(url: string): Promise<boolean> {
+  const u = new URL(url)
+  const policy = await policyFor(u)
+  return "rules" in policy ? isAllowed(policy.rules, u.pathname + u.search) : policy.all
+}
+
+export async function checkRobots(url: string): Promise<RobotsVerdict> {
+  const u = new URL(url)
+  const robotsUrl = `${u.protocol}//${u.host}/robots.txt`
+  const policy = await policyFor(u)
+  if (!("rules" in policy)) return { allowed: policy.all, reason: policy.reason, robotsUrl }
+  const allowed = isAllowed(policy.rules, u.pathname + u.search)
   return {
     allowed,
     reason: allowed ? `robots.txt allows ${u.pathname}` : `robots.txt disallows ${u.pathname} for "*"/${AGENT_TOKEN}`,

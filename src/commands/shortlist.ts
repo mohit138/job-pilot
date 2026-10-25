@@ -1,18 +1,17 @@
 import { writeFileSync } from "fs"
 import { mePath } from "../paths.ts"
 import { loadStore, storePath, type StoredJob } from "../store.ts"
+import { esc, jobLink } from "./cards.ts"
 
 export interface ShortlistOpts {
   min: number
 }
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!)
-
 function row(j: StoredJob, n: number): string {
   return `<tr class="${j.status}">
   <td class="n">${n}</td>
   <td class="score">${j.score ?? "-"}</td>
-  <td><a href="${esc(j.url)}" target="_blank" rel="noopener">${esc(j.title)}</a><div class="note">${esc(j.rankNote ?? "")}</div></td>
+  <td>${jobLink(j)}<div class="note">${esc(j.rankNote ?? "")}</div></td>
   <td>${esc(j.company)}</td>
   <td>${esc(j.location ?? "-")}</td>
   <td><span class="badge">${j.status}</span></td>

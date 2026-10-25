@@ -11,12 +11,20 @@ import { runJobs, runSet } from "./commands/jobs.ts"
 import { runInit } from "./commands/init.ts"
 import { runDescribe } from "./commands/describe.ts"
 import { runShortlist } from "./commands/shortlist.ts"
+import { runBoard } from "./commands/board.ts"
+import { APPLY_ACTIONS, runApply, type ApplyAction } from "./commands/apply.ts"
 import { checkRobots } from "./portals/robots.ts"
 
 interface Flags {
   _: string[]
   [k: string]: string | boolean | string[]
 }
+
+/** Flags that always take a value, so the next arg is theirs even if it starts with "-" (--note "- no visa"). */
+const VALUE_FLAGS = new Set([
+  "query", "location", "limit", "company", "status", "format", "sort", "name", "url", "ats", "board",
+  "notes", "note", "jobage", "max-per-company", "min", "port", "score",
+])
 
 function parseFlags(argv: string[]): Flags {
   const flags: Flags = { _: [] }
@@ -26,7 +34,7 @@ function parseFlags(argv: string[]): Flags {
     if (a.startsWith("-")) {
       const key = alias[a.replace(/^-+/, "")] ?? a.replace(/^-+/, "")
       const next = argv[i + 1]
-      if (next === undefined || next.startsWith("-")) {
+      if (next === undefined || (next.startsWith("-") && !VALUE_FLAGS.has(key))) {
         flags[key] = true
       } else {
         flags[key] = next
@@ -51,6 +59,10 @@ USAGE  (bun run jp <command> ...)
                                          List jobs in the jobs file
   describe [<job-id>...] [-s new]        Fetch and keep full descriptions (default: all new jobs)
   shortlist [--min 60]                   Write me/shortlist.html: ranked jobs, best first, numbered
+  board [--port 4317] [--min 60]         Live page on this machine: shortlist with Approve/Skip, apply progress, /demo form
+  apply [queue|next|demo]                Approved jobs to apply to; 'next' starts the best one, 'demo' a practice job (used by /apply)
+  apply step|done|fail|later <job-id> [--note <text>]
+                                         Record a step; mark applied once YOU have submitted (Claude never submits); mark failed, or put back
   set <job-id>... [-s <status>] [--score 0-100] [--note <text>] [--force]
                                          Update jobs (statuses: new ranked approved applying applied skipped failed closed)
   detail <job-id> [--format json|plain]  Fetch one job's full description from its portal
@@ -85,6 +97,8 @@ const KNOWN_FLAGS: Record<string, Set<string>> = {
   jobs: new Set(["status", "company", "sort", "limit", "format", "help", "h"]),
   describe: new Set(["status", "help", "h"]),
   shortlist: new Set(["min", "help", "h"]),
+  board: new Set(["port", "min", "help", "h"]),
+  apply: new Set(["note", "help", "h"]),
   set: new Set(["status", "score", "note", "force", "help", "h"]),
   robots: new Set(["help", "h"]),
 }
@@ -200,6 +214,19 @@ async function main(): Promise<number> {
       const min = int(flags.min, "min")
       if (min instanceof Error) return fail(min.message, "BAD_NUMBER")
       return runShortlist({ min: min ?? 60 })
+    }
+
+    case "board": {
+      const port = int(flags.port, "port")
+      const min = int(flags.min, "min")
+      for (const v of [port, min]) if (v instanceof Error) return fail(v.message, "BAD_NUMBER")
+      return runBoard({ port: (port as number | undefined) ?? 4317, min: (min as number | undefined) ?? 60 })
+    }
+
+    case "apply": {
+      const action = (args[1] ?? "queue") as ApplyAction
+      if (!APPLY_ACTIONS.includes(action)) return fail(`apply takes one of: ${APPLY_ACTIONS.join(", ")}`, "BAD_ACTION")
+      return runApply({ action, id: args[2], note: str(flags.note) })
     }
 
     case "set": {

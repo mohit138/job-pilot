@@ -2,7 +2,7 @@
   "name": "job-pilot",
   "version": "0.1.0",
   "private": true,
-  "description": "Find jobs on company career portals, rank them, and apply in your own browser with Claude, one confirmed submit at a time.",
+  "description": "Find jobs on the career portals of companies you choose, rank them, and have Claude fill approved applications in your Chrome for you to review and submit.",
   "type": "module",
   "license": "MIT",
   "scripts": {

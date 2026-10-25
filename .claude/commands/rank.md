@@ -12,9 +12,9 @@ Score every `new` job in the jobs file from 0 to 100 for how well it fits the us
    ```
    Repeat until `jobs -s new` is empty. Saving per job means an interrupted run loses nothing.
 4. Run `bun run jp shortlist` (add `--min <n>` if the user asked for a different cut-off; default 60). It writes `me/shortlist.html` and prints the numbered rows.
-5. Reply with: how many were ranked, the top 10 as a table (# · score · company · title · note), and the path to `me/shortlist.html` (on a Mac: `open me/shortlist.html`). End with: "Say which to approve, e.g. approve 1 3 5."
+5. Reply with: how many were ranked, the top 10 as a table (# · score · company · title · note), and the path to `me/shortlist.html` (on a Mac: `open me/shortlist.html`). End with: "Say which to approve, e.g. approve 1 3 5, or use the board (`/board`, http://127.0.0.1:4317)."
 
-When the user then says "approve 1 3 5" (or titles), map the numbers to ids from the shortlist you showed, run `bun run jp set <ids> -s approved`, and confirm the list back. Approving is only a choice for /apply later; nothing is submitted.
+When the user then says "approve 1 3 5" (or titles), map the numbers to ids from the shortlist you showed, run `bun run jp set <ids> -s approved`, and confirm the list back. Approving only queues the job for /apply, where Claude fills the form and the user reviews and submits it.
 
 ## Rubric
 

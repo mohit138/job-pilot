@@ -1,5 +1,5 @@
 import { writeError } from "../portals/helpers.ts"
-import { canMove, loadStore, saveStore, setStatus, STATUSES, storePath, type Status, type StoredJob } from "../store.ts"
+import { canMove, loadStore, setStatus, STATUSES, storePath, updateStore, type Status, type StoredJob } from "../store.ts"
 
 export interface JobsOpts {
   statuses?: string[]
@@ -70,31 +70,31 @@ export function runSet(opts: SetOpts): number {
     writeError("set needs --status, --score or --note", "NOTHING_TO_SET")
     return 1
   }
-  const path = storePath()
-  const store = loadStore(path)
-  const missing = opts.ids.filter((id) => !store.jobs[id])
-  if (missing.length) {
-    writeError(`not in the jobs file: ${missing.join(", ")}`, "UNKNOWN_JOB")
-    return 1
-  }
-  const refused = opts.status && !opts.force ? opts.ids.filter((id) => !canMove(store.jobs[id].status, opts.status as Status)) : []
-  if (refused.length) {
-    writeError(`already applied, so not moved: ${refused.join(", ")} (add --force if this is really a correction)`, "ALREADY_APPLIED")
-    return 1
-  }
+  // Checks and changes happen on one fresh read, under the jobs-file lock.
+  return updateStore(storePath(), (store) => {
+    const missing = opts.ids.filter((id) => !store.jobs[id])
+    if (missing.length) {
+      writeError(`not in the jobs file: ${missing.join(", ")}`, "UNKNOWN_JOB")
+      return 1
+    }
+    const refused = opts.status && !opts.force ? opts.ids.filter((id) => !canMove(store.jobs[id].status, opts.status as Status)) : []
+    if (refused.length) {
+      writeError(`already applied, so not moved: ${refused.join(", ")} (add --force if this is really a correction)`, "ALREADY_APPLIED")
+      return 1
+    }
 
-  const changed: StoredJob[] = []
-  for (const id of opts.ids) {
-    const j = store.jobs[id]
-    if (opts.score !== undefined) j.score = opts.score
-    if (opts.status) setStatus(j, opts.status as Status, opts.note)
-    else if (opts.note) j.rankNote = opts.note
-    if (opts.status === "ranked" && opts.note) j.rankNote = opts.note
-    changed.push(j)
-  }
-  saveStore(path, store)
-  process.stdout.write(
-    JSON.stringify({ updated: changed.map((j) => ({ id: j.id, status: j.status, score: j.score ?? null })) }, null, 2) + "\n"
-  )
-  return 0
+    const changed: StoredJob[] = []
+    for (const id of opts.ids) {
+      const j = store.jobs[id]
+      if (opts.score !== undefined) j.score = opts.score
+      if (opts.status) setStatus(j, opts.status as Status, opts.note)
+      else if (opts.note) j.rankNote = opts.note
+      if (opts.status === "ranked" && opts.note) j.rankNote = opts.note
+      changed.push(j)
+    }
+    process.stdout.write(
+      JSON.stringify({ updated: changed.map((j) => ({ id: j.id, status: j.status, score: j.score ?? null })) }, null, 2) + "\n"
+    )
+    return 0
+  })
 }

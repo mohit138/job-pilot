@@ -1,13 +1,19 @@
 // One adapter per applicant-tracking system. Each knows how to list a
 // company's open jobs and fetch one job's description from that ATS's public
-// (unauthenticated) job-board endpoints. See ../url-reference.md for details.
+// (unauthenticated) job-board endpoints. See src/portals/README.md for details.
+// Whole boards and feeds go through cachedJson/cachedText, so each is fetched
+// once per run however many queries or descriptions need it.
 
 import {
+  cachedJson,
+  cachedText,
   htmlToText,
+  httpUrl,
   jsonFetch,
   locationTerms,
   matchesLocation,
   parseRelativePosted,
+  RobotsDisallowed,
   textFetch,
   titleCase,
   toDate,
@@ -46,10 +52,12 @@ export interface Adapter {
   detail(c: Company, jobId: string): Promise<JobDetail | null>
 }
 
+/** Every job is built here, so a non-http(s) link never gets in: it becomes "". */
 const job = (c: Company, id: string | number, fields: Omit<Job, "id" | "company">): Job => ({
   id: `${c.slug}:${id}`,
   company: c.name,
   ...fields,
+  url: httpUrl(fields.url),
 })
 
 // ---------------------------------------------------------------------------
@@ -60,7 +68,7 @@ const greenhouse: Adapter = {
   serverLocation: () => false,
   policyUrl: (c) => `https://boards-api.greenhouse.io/v1/boards/${c.board.token}/jobs`,
   async search(c) {
-    const data = await jsonFetch(`https://boards-api.greenhouse.io/v1/boards/${c.board.token}/jobs`)
+    const data = await cachedJson(`https://boards-api.greenhouse.io/v1/boards/${c.board.token}/jobs`)
     return (data?.jobs ?? []).map((j: any) =>
       job(c, j.id, {
         title: j.title,
@@ -104,7 +112,7 @@ const lever: Adapter = {
   serverLocation: () => false,
   policyUrl: (c) => `https://api.lever.co/v0/postings/${c.board.company}`,
   async search(c) {
-    const data = await jsonFetch(`https://api.lever.co/v0/postings/${c.board.company}?mode=json`)
+    const data = await cachedJson(`https://api.lever.co/v0/postings/${c.board.company}?mode=json`)
     return Array.isArray(data) ? data.map((j) => leverJob(c, j)) : []
   },
   async detail(c, id) {
@@ -137,11 +145,11 @@ const ashby: Adapter = {
   serverLocation: () => false,
   policyUrl: (c) => `https://api.ashbyhq.com/posting-api/job-board/${c.board.name}`,
   async search(c) {
-    const data = await jsonFetch(`https://api.ashbyhq.com/posting-api/job-board/${c.board.name}`)
+    const data = await cachedJson(`https://api.ashbyhq.com/posting-api/job-board/${c.board.name}`)
     return (data?.jobs ?? []).filter((j: any) => j.isListed !== false).map((j: any) => ashbyJob(c, j))
   },
   async detail(c, id) {
-    const data = await jsonFetch(`https://api.ashbyhq.com/posting-api/job-board/${c.board.name}`)
+    const data = await cachedJson(`https://api.ashbyhq.com/posting-api/job-board/${c.board.name}`)
     const j = (data?.jobs ?? []).find((x: any) => x.id === id)
     if (!j) return null
     return { ...ashbyJob(c, j), description: j.descriptionPlain ?? htmlToText(j.descriptionHtml) }
@@ -165,8 +173,17 @@ function feedItems(data: any, path: string | undefined): any[] {
   return Array.isArray(v) ? v : []
 }
 
+/** A feed link, made absolute against the feed's own URL. */
+function feedLink(c: Company, raw: unknown): string {
+  try {
+    return raw ? new URL(String(raw), c.board.url).href : ""
+  } catch {
+    return ""
+  }
+}
+
 const feedJob = (c: Company, j: any, index: number): Job => {
-  const link = String(getPath(j, c.board.link) ?? "")
+  const link = feedLink(c, getPath(j, c.board.link))
   return job(c, getPath(j, c.board.id) ?? link.match(/(\d{6,})/)?.[1] ?? index, {
     title: String(getPath(j, c.board.title) ?? ""),
     location: getPath(j, c.board.location) ?? null,
@@ -181,7 +198,7 @@ const jsonfeed: Adapter = {
   serverLocation: () => false,
   policyUrl: (c) => c.board.url,
   async search(c) {
-    const data = await jsonFetch(c.board.url)
+    const data = await cachedJson(c.board.url)
     return feedItems(data, c.board.items)
       .map((j, i) => feedJob(c, j, i))
       .filter((j) => j.title && j.url)
@@ -195,6 +212,7 @@ const jsonfeed: Adapter = {
 
 /** Fetch a job page and extract its description, preferring schema.org JobPosting JSON-LD. */
 async function pageDetail(base: Job): Promise<JobDetail | null> {
+  if (!base.url) return { ...base, description: null }
   const html = await textFetch(base.url)
   if (!html) return null
   for (const m of html.matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
@@ -437,11 +455,13 @@ const oracle: Adapter = {
 const DEFAULT_JOB_PATTERN = "/job/(?<location>[^/]+)/(?<slug>[^/]+)/\\d+/(?<id>\\d+)"
 
 async function sitemapUrls(url: string, depth = 0): Promise<string[]> {
-  const xml = await textFetch(url)
+  const xml = await cachedText(url)
   if (!xml) return []
-  const locs = [...xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/g)].map((m) => m[1])
+  const locs = [...xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/g)].map((m) => m[1]).filter(httpUrl)
   if (/<sitemapindex/i.test(xml) && depth < 1) {
-    const nested = await Promise.all(locs.slice(0, 20).map((l) => sitemapUrls(l, depth + 1)))
+    // A nested sitemap robots.txt disallows is skipped; the rest still count.
+    const read = (l: string) => sitemapUrls(l, depth + 1).catch((e) => (e instanceof RobotsDisallowed ? [] : Promise.reject(e)))
+    const nested = await Promise.all(locs.slice(0, 20).map(read))
     return nested.flat()
   }
   return locs

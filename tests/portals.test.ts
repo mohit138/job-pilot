@@ -70,6 +70,13 @@ describe("robots", () => {
     expect(isAllowed(rulesFor("User-agent: *\nAllow: /a\nDisallow: /a\n"), "/a")).toBe(false)
     expect(isAllowed(rulesFor("User-agent: *\nDisallow: /*.json$\n"), "/api/jobs.json")).toBe(false)
   })
+  test("agent groups match the job-pilot token exactly, any case; empty agent lines are ignored", () => {
+    expect(isAllowed(rulesFor("User-agent: JOB-PILOT\nDisallow: /\n"), "/x")).toBe(false)
+    // Substrings of our name are other bots: fall back to "*".
+    expect(isAllowed(rulesFor("User-agent: pilot\nDisallow: /\nUser-agent: *\nAllow: /\n"), "/x")).toBe(true)
+    expect(isAllowed(rulesFor("User-agent: job\nDisallow: /\n"), "/x")).toBe(true)
+    expect(isAllowed(rulesFor("User-agent:\nUser-agent: *\nDisallow: /a\n"), "/a")).toBe(false)
+  })
 })
 
 describe("remote roles and titles from slugs", () => {

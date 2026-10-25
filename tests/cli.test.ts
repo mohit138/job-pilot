@@ -53,6 +53,11 @@ describe("cli", () => {
 
     const applied = JSON.parse((await jp("jobs", "-s", "applied", "--format", "json")).stdout)
     expect(applied.jobs.map((j: any) => j.id)).toEqual(["acme:1"])
+
+    // A value may start with "-" when the flag takes one.
+    expect((await jp("set", "acme:2", "-s", "skipped", "--note", "- missing visa")).exitCode).toBe(0)
+    const two = JSON.parse(readFileSync(join(home, "jobs.json"), "utf8")).jobs["acme:2"]
+    expect(two.history.at(-1)).toMatchObject({ status: "skipped", note: "- missing visa" })
   })
 
   test("shortlist lists ranked jobs above the cut-off, best first, numbered", async () => {

@@ -74,7 +74,7 @@ Then:
 - A few sample titles from the best sources, so the user can see the results are real
 - Companies that failed or were refused, with the reason in one line each
 - The registry path and total company count (`CLI list`)
-- Next step: "Run `/scrape` to pull their jobs."
+- Next step: "Say **find me jobs** (or run `/scrape`) to pull their jobs."
 
 ## Rules
 

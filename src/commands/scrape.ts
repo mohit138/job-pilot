@@ -2,7 +2,7 @@ import type { Job } from "../portals/adapters.ts"
 import { writeError } from "../portals/helpers.ts"
 import { loadRegistry, registryPath } from "../portals/registry.ts"
 import { excludedByTitle, loadSettings } from "../settings.ts"
-import { loadStore, mergeScraped, saveStore, storePath } from "../store.ts"
+import { loadStore, mergeScraped, storePath, updateStore } from "../store.ts"
 import { searchAll, selectCompanies, type CompanyStatus } from "./search.ts"
 
 export interface ScrapeOpts {
@@ -13,14 +13,16 @@ export interface ScrapeOpts {
 /**
  * Run every search query against every enabled company, then merge the
  * results into the jobs file. Only jobs never seen before come back as new.
+ * The jobs file is read fresh only after the network work, so changes made
+ * meanwhile (`jp set`, the board) are kept.
  */
 export async function runScrape(opts: ScrapeOpts): Promise<number> {
-  let settings, registry, store
+  let settings, registry
   const path = storePath()
   try {
     settings = loadSettings()
     registry = loadRegistry(registryPath())
-    store = loadStore(path)
+    loadStore(path) // fail on a malformed jobs file before minutes of fetching
   } catch (e) {
     writeError((e as Error).message, "CONFIG_ERROR")
     return 1
@@ -52,8 +54,7 @@ export async function runScrape(opts: ScrapeOpts): Promise<number> {
 
   const found = [...byId.values()]
   const kept = found.filter((j) => !excludedByTitle(j.title, settings.excludeTitleWords))
-  const merge = mergeScraped(store, kept)
-  saveStore(path, store)
+  const merge = updateStore(path, (store) => mergeScraped(store, kept))
 
   // Per-company counts are unique jobs kept, so they add up to the totals above.
   const statuses = [...errors.values()]
